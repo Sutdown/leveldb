@@ -11,6 +11,7 @@ namespace leveldb {
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
 // disk and should not be changed.
+/**/
 enum Tag {
   kComparator = 1,
   kLogNumber = 2,

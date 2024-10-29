@@ -45,15 +45,18 @@ class SkipList {
   // Create a new SkipList object that will use "cmp" for comparing keys,
   // and will allocate memory using "*arena".  Objects allocated in the arena
   // must remain allocated for the lifetime of the skiplist object.
+  // 接收比较器和内存池
   explicit SkipList(Comparator cmp, Arena* arena);
 
+  // 禁止拷贝和构造
   SkipList(const SkipList&) = delete;
   SkipList& operator=(const SkipList&) = delete;
 
-  // Insert key into the list.
+  // Insert key into the list. 插入
   // REQUIRES: nothing that compares equal to key is currently in the list.
   void Insert(const Key& key);
 
+  // 查找
   // Returns true iff an entry that compares equal to key is in the list.
   bool Contains(const Key& key) const;
 
@@ -129,7 +132,7 @@ class SkipList {
   Comparator const compare_;
   Arena* const arena_;  // Arena used for allocations of nodes
 
-  Node* const head_;
+  Node* const head_; // 链表
 
   // Modified only by Insert().  Read racily by readers, but stale
   // values are ok.
@@ -148,6 +151,7 @@ struct SkipList<Key, Comparator>::Node {
 
   // Accessors/mutators for links.  Wrapped in methods so we can
   // add the appropriate barriers as necessary.
+  // 适用于数据一致性
   Node* Next(int n) {
     assert(n >= 0);
     // Use an 'acquire load' so that we observe a fully initialized
@@ -162,6 +166,7 @@ struct SkipList<Key, Comparator>::Node {
   }
 
   // No-barrier variants that can be safely used in a few locations.
+  // 不保证其它操作顺序，保护共享资源，适用于性能优先
   Node* NoBarrier_Next(int n) {
     assert(n >= 0);
     return next_[n].load(std::memory_order_relaxed);
@@ -172,6 +177,7 @@ struct SkipList<Key, Comparator>::Node {
   }
 
  private:
+     // 原子存储下一个结点的指针
   // Array of length equal to the node height.  next_[0] is lowest level link.
   std::atomic<Node*> next_[1];
 };
@@ -236,6 +242,11 @@ inline void SkipList<Key, Comparator>::Iterator::SeekToLast() {
   }
 }
 
+/*
+利用了随机性来调整跳表的层高，
+从而保证跳表的平均查找性能在对数级别，
+同时又能有效地控制内存使用
+*/
 template <typename Key, class Comparator>
 int SkipList<Key, Comparator>::RandomHeight() {
   // Increase height with probability 1 in kBranching

@@ -219,6 +219,7 @@ class LEVELDB_EXPORT Env {
 };
 
 // A file abstraction for reading sequentially through a file
+/*顺序读取文件，适合遍历*/
 class LEVELDB_EXPORT SequentialFile {
  public:
   SequentialFile() = default;
@@ -249,6 +250,7 @@ class LEVELDB_EXPORT SequentialFile {
 };
 
 // A file abstraction for randomly reading the contents of a file.
+/*支持随机访问，从文件的任意偏移量开始读取数据，允许并发访问*/
 class LEVELDB_EXPORT RandomAccessFile {
  public:
   RandomAccessFile() = default;
@@ -273,7 +275,7 @@ class LEVELDB_EXPORT RandomAccessFile {
 
 // A file abstraction for sequential writing.  The implementation
 // must provide buffering since callers may append small fragments
-// at a time to the file.
+// at a time to the file. 顺序写入文件，允许分段写入并提供缓冲
 class LEVELDB_EXPORT WritableFile {
  public:
   WritableFile() = default;
@@ -290,6 +292,7 @@ class LEVELDB_EXPORT WritableFile {
 };
 
 // An interface for writing log messages.
+/*记录日志信息*/
 class LEVELDB_EXPORT Logger {
  public:
   Logger() = default;
@@ -303,7 +306,7 @@ class LEVELDB_EXPORT Logger {
   virtual void Logv(const char* format, std::va_list ap) = 0;
 };
 
-// Identifies a locked file.
+// Identifies a locked file.文件锁定，确保多线程环境中文件的安全访问
 class LEVELDB_EXPORT FileLock {
  public:
   FileLock() = default;

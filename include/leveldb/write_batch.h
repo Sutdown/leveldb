@@ -30,6 +30,7 @@ namespace leveldb {
 
 class Slice;
 
+/*批量写入操作*/
 class LEVELDB_EXPORT WriteBatch {
  public:
   class LEVELDB_EXPORT Handler {
@@ -73,8 +74,11 @@ class LEVELDB_EXPORT WriteBatch {
   Status Iterate(Handler* handler) const;
 
  private:
+  /*如果将所有逻辑放在一个类中，
+    任何内部修改都有可能影响公共接口。
+    将内部逻辑分离，可以减少对外部接口的影响。*/
   friend class WriteBatchInternal;
-
+  /*存储了该批次操作的具体格式和内容*/
   std::string rep_;  // See comment in write_batch.cc for the format of rep_
 };
 

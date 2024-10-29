@@ -25,6 +25,7 @@
 
 namespace leveldb {
 
+    // cache的缓存接口
 class LEVELDB_EXPORT Cache;
 
 // Create a new cache with a fixed size capacity.  This implementation
@@ -39,10 +40,10 @@ class LEVELDB_EXPORT Cache {
   Cache& operator=(const Cache&) = delete;
 
   // Destroys all existing entries by calling the "deleter"
-  // function that was passed to the constructor.
+  // function that was passed to the constructor. 回调函数销毁缓存的内容
   virtual ~Cache();
 
-  // Opaque handle to an entry stored in the cache.
+  // Opaque handle to an entry stored in the cache. 指向cache中的一个缓存项
   struct Handle {};
 
   // Insert a mapping from key->value into the cache and assign it
@@ -50,7 +51,7 @@ class LEVELDB_EXPORT Cache {
   //
   // Returns a handle that corresponds to the mapping.  The caller
   // must call this->Release(handle) when the returned mapping is no
-  // longer needed.
+  // longer needed. 有引用计数
   //
   // When the inserted entry is no longer needed, the key and
   // value will be passed to "deleter".

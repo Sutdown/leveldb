@@ -14,6 +14,11 @@ class SnapshotList;
 
 // Snapshots are kept in a doubly-linked list in the DB.
 // Each SnapshotImpl corresponds to a particular sequence number.
+/* 
+表示一个具体的快照实例，包含一个序列号和指向前后快照的指针
+序列号的主要作用是提供快照创建时数据库状态的唯一标识
+双链表，便于快速插入和删除
+*/
 class SnapshotImpl : public Snapshot {
  public:
   SnapshotImpl(SequenceNumber sequence_number)
@@ -36,6 +41,9 @@ class SnapshotImpl : public Snapshot {
 #endif  // !defined(NDEBUG)
 };
 
+/*
+* 管理多个SnapshotImpl的链表结构，处理快照的创建和删除
+*/
 class SnapshotList {
  public:
   SnapshotList() : head_(0) {
@@ -86,7 +94,7 @@ class SnapshotList {
   }
 
  private:
-  // Dummy head of doubly-linked list of snapshots
+  // Dummy head of doubly-linked list of snapshots 虚拟头结点
   SnapshotImpl head_;
 };
 

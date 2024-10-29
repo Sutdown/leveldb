@@ -17,7 +17,8 @@
 
 namespace leveldb {
 
-struct Table::Rep {
+struct Table::Rep { 
+    // Table的所有数据都通过Table::Rep类型的字段rep_保存
   ~Rep() {
     delete filter;
     delete[] filter_data;
@@ -35,6 +36,12 @@ struct Table::Rep {
   Block* index_block;
 };
 
+/*
+* 读取sstable中的footer，加载其filter block和index block的数据到内存
+* 为table分配一个cache_id
+* 在通过Table读取其中DataBlock的数据时，
+* 会拼接cache_id与Block的offset拼接作为BlockCache的key。
+*/
 Status Table::Open(const Options& options, RandomAccessFile* file,
                    uint64_t size, Table** table) {
   *table = nullptr;
@@ -78,7 +85,9 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
 
   return s;
 }
-
+/*
+* 读取sstable元数据，根据sstable的footer找到filter block
+*/
 void Table::ReadMeta(const Footer& footer) {
   if (rep_->options.filter_policy == nullptr) {
     return;  // Do not need any metadata
@@ -108,6 +117,9 @@ void Table::ReadMeta(const Footer& footer) {
   delete meta;
 }
 
+/*
+* 将filter加载到结构体rep_中
+*/
 void Table::ReadFilter(const Slice& filter_handle_value) {
   Slice v = filter_handle_value;
   BlockHandle filter_handle;
@@ -150,6 +162,9 @@ static void ReleaseBlock(void* arg, void* h) {
 
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
+/*
+* 将在IndexBlock中查到的value值转为相应DataBlock的Iterator
+*/
 Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
                              const Slice& index_value) {
   Table* table = reinterpret_cast<Table*>(arg);
@@ -211,25 +226,31 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
       &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
+/*在SSTable中通过key查找value*/
 Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*handle_result)(void*, const Slice&,
                                                 const Slice&)) {
   Status s;
+  // 获取indexblock的iterator
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  iiter->Seek(k);
+  iiter->Seek(k); /*键的查找*/
   if (iiter->Valid()) {
-    Slice handle_value = iiter->value();
-    FilterBlockReader* filter = rep_->filter;
+    Slice handle_value = iiter->value(); /*获取与键关联的值*/
+    FilterBlockReader* filter = rep_->filter; /*获取过滤器*/
     BlockHandle handle;
     if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
-      // Not found
+      // 过滤器为空且键可能不匹配
+        // not found
     } else {
+      /*过滤器顺利找到，根据value查找相应的数据块中的迭代器*/
       Iterator* block_iter = BlockReader(this, options, iiter->value());
-      block_iter->Seek(k);
+      block_iter->Seek(k); // 在数据块中查找key
       if (block_iter->Valid()) {
+          // 找到时采用handle_result 处理结果
         (*handle_result)(arg, block_iter->key(), block_iter->value());
       }
+      // 更新状态
       s = block_iter->status();
       delete block_iter;
     }

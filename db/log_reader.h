@@ -19,7 +19,7 @@ namespace log {
 
 class Reader {
  public:
-  // Interface for reporting errors.
+  // Interface for reporting errors.报告错误和数据损坏的接口
   class Reporter {
    public:
     virtual ~Reporter();
@@ -59,7 +59,11 @@ class Reader {
   //
   // Undefined before the first call to ReadRecord.
   uint64_t LastRecordOffset();
-
+  /*类功能
+  * 读取日志记录
+  * 支持检查和校验
+  * 处理数据损坏
+  */
  private:
   // Extend record types with the following special values
   enum {
@@ -75,35 +79,35 @@ class Reader {
   // Skips all blocks that are completely before "initial_offset_".
   //
   // Returns true on success. Handles reporting.
-  bool SkipToInitialBlock();
+  bool SkipToInitialBlock(); // 跳过所有initial_offset之前的块
 
   // Return type, or one of the preceding special values
-  unsigned int ReadPhysicalRecord(Slice* result);
+  unsigned int ReadPhysicalRecord(Slice* result); // 读取物理记录
 
-  // Reports dropped bytes to the reporter.
+  // Reports dropped bytes to the reporter.报告数据损坏和丢失字节数量
   // buffer_ must be updated to remove the dropped bytes prior to invocation.
-  void ReportCorruption(uint64_t bytes, const char* reason);
+  void ReportCorruption(uint64_t bytes, const char* reason); 
   void ReportDrop(uint64_t bytes, const Status& reason);
 
-  SequentialFile* const file_;
-  Reporter* const reporter_;
-  bool const checksum_;
-  char* const backing_store_;
-  Slice buffer_;
-  bool eof_;  // Last Read() indicated EOF by returning < kBlockSize
+  SequentialFile* const file_; // 指向要读取的文件指针
+  Reporter* const reporter_; // 报告错误和数据损坏的接口
+  bool const checksum_; // 指示是否读取时验证校验和
+  char* const backing_store_; // 存储读取记录的临时缓冲区
+  Slice buffer_; // 当前读取记录的切片
+  bool eof_;  // 上一次读取是否到达文件末尾
 
   // Offset of the last record returned by ReadRecord.
-  uint64_t last_record_offset_;
+  uint64_t last_record_offset_; // 保存上一次返回记录的物理偏移量
   // Offset of the first location past the end of buffer_.
-  uint64_t end_of_buffer_offset_;
+  uint64_t end_of_buffer_offset_; // 缓冲区结尾的偏移量
 
   // Offset at which to start looking for the first record to return
-  uint64_t const initial_offset_;
+  uint64_t const initial_offset_; // 指定开始查找记录的初始偏移量
 
   // True if we are resynchronizing after a seek (initial_offset_ > 0). In
   // particular, a run of kMiddleType and kLastType records can be silently
   // skipped in this mode
-  bool resyncing_;
+  bool resyncing_; // 当前是否正在重新同步，处理随机读取
 };
 
 }  // namespace log

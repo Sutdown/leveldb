@@ -12,7 +12,9 @@
 
 namespace leveldb {
 namespace log {
+/*实现writer类的功能*/
 
+    // 初始化CRC
 static void InitTypeCrc(uint32_t* type_crc) {
   for (int i = 0; i <= kMaxRecordType; i++) {
     char t = static_cast<char>(i);
@@ -21,16 +23,17 @@ static void InitTypeCrc(uint32_t* type_crc) {
 }
 
 Writer::Writer(WritableFile* dest) : dest_(dest), block_offset_(0) {
-  InitTypeCrc(type_crc_);
+  InitTypeCrc(type_crc_); // 创建写入器
 }
 
 Writer::Writer(WritableFile* dest, uint64_t dest_length)
     : dest_(dest), block_offset_(dest_length % kBlockSize) {
-  InitTypeCrc(type_crc_);
+  InitTypeCrc(type_crc_); // 支持将数据添加道以有文件中
 }
 
 Writer::~Writer() = default;
 
+/*将记录分块写入文件*/
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
   size_t left = slice.size();
@@ -45,6 +48,7 @@ Status Writer::AddRecord(const Slice& slice) {
     assert(leftover >= 0);
     if (leftover < kHeaderSize) {
       // Switch to a new block
+        // 当前块剩余空间不足以容纳头部，填充当前块，重置偏移量
       if (leftover > 0) {
         // Fill the trailer (literal below relies on kHeaderSize being 7)
         static_assert(kHeaderSize == 7, "");
@@ -59,7 +63,7 @@ Status Writer::AddRecord(const Slice& slice) {
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
     const size_t fragment_length = (left < avail) ? left : avail;
 
-    RecordType type;
+    RecordType type; // 确定记录类型
     const bool end = (left == fragment_length);
     if (begin && end) {
       type = kFullType;
@@ -71,6 +75,7 @@ Status Writer::AddRecord(const Slice& slice) {
       type = kMiddleType;
     }
 
+    // 写入物理记录
     s = EmitPhysicalRecord(type, ptr, fragment_length);
     ptr += fragment_length;
     left -= fragment_length;
@@ -93,7 +98,7 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
   // Compute the crc of the record type and the payload.
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, length);
   crc = crc32c::Mask(crc);  // Adjust for storage
-  EncodeFixed32(buf, crc);
+  EncodeFixed32(buf, crc); //将crc编码道buf中
 
   // Write the header and the payload
   Status s = dest_->Append(Slice(buf, kHeaderSize));

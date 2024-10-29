@@ -64,22 +64,33 @@ class MemTable {
 
  private:
   friend class MemTableIterator;
-  friend class MemTableBackwardIterator;
+  friend class MemTableBackwardIterator;  // 迭代器可以直接访问
+ /*
+ 这里可以想到一个问题，在skiplist中，是将迭代器作为skiplist内嵌的一个类，但是这里是采用友元的方式，那么如何评价这两种方式？
+ 1.友元可以保持清晰的接口，将迭代器和mentable的实现分配，是代码易于维护，同时如果其它类的迭代器也可以用这个，那么可以直接被复用。但是友元会增加类之间的依赖性，设计更加复杂。
+ 2.内嵌迭代器比较适用于迭代器和类的关系极其紧密，并且迭代器功能简单的时候。
+ 所以整体来说，迭代器逻辑复杂并且和类相对独立，建议友元；迭代器逻辑简单并且和类紧密相关，建议内嵌。
+ */
 
   struct KeyComparator {
-    const InternalKeyComparator comparator;
+    const InternalKeyComparator comparator;  // 定义键的比较规则
     explicit KeyComparator(const InternalKeyComparator& c) : comparator(c) {}
-    int operator()(const char* a, const char* b) const;
+    int operator()(const char* a, const char* b) const;  // 重载实现具体逻辑
   };
 
-  typedef SkipList<const char*, KeyComparator> Table;
+  typedef SkipList<const char*, KeyComparator> Table;  // 存储类型，比较类型
 
-  ~MemTable();  // Private since only Unref() should be used to delete it
+  ~MemTable();  // 设计的目的是为了确保 MemTable 的对象只能通过调用 Unref()
+                // 方法来删除，防止外部代码直接删除对象，确保内存管理的安全性。
 
   KeyComparator comparator_;
-  int refs_;
-  Arena arena_;
-  Table table_;
+  int refs_;     // 引用计数，管理memtable的生命周期
+  /*
+  类似于shared_ptr，当有多个组件需要同时访问memtable实例时
+  使用引用计数可以安全的共享memtable，同时也避免了重复删除，实现了可靠的内存管理
+   */
+  Arena arena_;  // 内存池
+  Table table_;  // 键值对
 };
 
 }  // namespace leveldb

@@ -278,6 +278,8 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
   return a->number > b->number;
 }
 
+/*遍历版本中的文件，查找与给定的用户键和内部键重叠的文件，并通过回调函数处理这些文件。
+通过分层的方式，确保在最新文件优先的同时，也不遗漏其他层中的重叠文件。*/
 void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                                  bool (*func)(void*, int, FileMetaData*)) {
   const Comparator* ucmp = vset_->icmp_.user_comparator();
@@ -321,6 +323,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
 }
 
+/*利用State结构体和match函数在版本集合的文件中查找指定的键，记住查找过程和文件访问统计信息，并更新状态*/
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
                     std::string* value, GetStats* stats) {
   stats->seek_file = nullptr;
@@ -340,9 +343,10 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
 
     static bool Match(void* arg, int level, FileMetaData* f) {
       State* state = reinterpret_cast<State*>(arg);
-
+      // 没有找到文件时，记录当前文件和层级
       if (state->stats->seek_file == nullptr &&
           state->last_file_read != nullptr) {
+        // 检查是否有文件已经被访问过
         // We have had more than one seek for this read.  Charge the 1st file.
         state->stats->seek_file = state->last_file_read;
         state->stats->seek_file_level = state->last_file_read_level;
@@ -351,6 +355,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       state->last_file_read = f;
       state->last_file_read_level = level;
 
+      // 使用tablecache从缓存中获取数据
       state->s = state->vset->table_cache_->Get(*state->options, f->number,
                                                 f->file_size, state->ikey,
                                                 &state->saver, SaveValue);
@@ -359,14 +364,14 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
         return false;
       }
       switch (state->saver.state) {
-        case kNotFound:
+        case kNotFound: // 继续找其它文件
           return true;  // Keep searching in other files
-        case kFound:
+        case kFound: // 找到键更新状态返回
           state->found = true;
           return false;
-        case kDeleted:
+        case kDeleted: // 返回，键已删除
           return false;
-        case kCorrupt:
+        case kCorrupt: // 记录错误状态返回
           state->s =
               Status::Corruption("corrupted key for ", state->saver.user_key);
           state->found = true;
@@ -394,6 +399,12 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   state.saver.user_key = k.user_key();
   state.saver.value = value;
 
+  /* 
+     逐层遍历覆盖了给定的lookupkey的sstable，同时调用match判断是否有我们想要查找的internalkey，
+     即如果发生了seek就会调用match。如果sstable中没有该key，则会继续查找，当找到了key时返回false
+     Match还会记录第一次seek miss的SSTable。DBImpl::Get会将SSTable的allowed_seeks减1，
+     MaybeScheduleCompaction检查是否需要触发Seek Compaction。 
+  */
   ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
 
   return state.found ? state.s : Status::NotFound(Slice());
@@ -467,19 +478,26 @@ bool Version::OverlapInLevel(int level, const Slice* smallest_user_key,
                                smallest_user_key, largest_user_key);
 }
 
+/*确立memtable输出的数据应该存放哪个层级*/
 int Version::PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                         const Slice& largest_user_key) {
   int level = 0;
+  // 看level0是否与memtable输出的键有重叠，如果没有，继续向下查找
+  // 没有重叠向下查找是为了确保多个层级之间都没有重叠，减少对于major的调用，提升性能
+  // 存在重叠的愿意按：多版本的不同数据，同一个文件的多个用户间，文件分布不均等
+  // major就是拿来处理层与层之间的重叠，进而定期优化清理层级结构。
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
     // Push to next level if there is no overlap in next level,
     // and the #bytes overlapping in the level after that are limited.
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
+    // 循环遍历，直到达到最大内存压缩层级
     while (level < config::kMaxMemCompactLevel) {
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
-        break;
+        break; // 有重叠时保持当层级退出
       }
+      // 如下面两层的重叠字数超过最大值时，容易导致性能问题，层级不能上升
       if (level + 2 < config::kNumLevels) {
         // Check that file does not overlap too many grandparent bytes.
         GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
@@ -805,9 +823,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     // No reason to unlock *mu here since we only hit this path in the
     // first call to LogAndApply (when opening the database).
     assert(descriptor_file_ == nullptr);
+    // 日志为空时，生成新的描述符文件名，创建可写文件
     new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
     s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
     if (s.ok()) {
+    // 将其作为新的日志写入其，同时将当前版本快照写入日志
       descriptor_log_ = new log::Writer(descriptor_file_);
       s = WriteSnapshot(descriptor_log_);
     }
@@ -821,8 +841,8 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     if (s.ok()) {
       std::string record;
       edit->EncodeTo(&record);
-      s = descriptor_log_->AddRecord(record);
-      if (s.ok()) {
+      s = descriptor_log_->AddRecord(record); //使用 descriptor_log_ 将该记录添加到MANIFEST日志中。
+      if (s.ok()) { // 同步到磁盘，确保写入持久化
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
@@ -833,6 +853,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     // If we just created a new descriptor file, install it by writing a
     // new CURRENT file that points to it.
     if (s.ok() && !new_manifest_file.empty()) {
+    // 更新current文件，指向新创建的描述符文件
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
     }
 
@@ -1496,11 +1517,16 @@ Compaction::~Compaction() {
   }
 }
 
+/*判断当前的操作是否可以简单移动*/
 bool Compaction::IsTrivialMove() const {
   const VersionSet* vset = input_version_->vset_;
   // Avoid a move if there is lots of overlapping grandparent data.
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
+  // 当前层有文件而下一层没有文件，因为这确保了移动不会引入重叠，并简化了未来的合并流程
+  // 如果在进行简单移动时，当前层的文件与祖父层的文件重叠过多，这可能导致在未来需要进行昂贵的合并操作
+  // 如果当前层与下一层之间的重叠较少，则在合并时主要关注当前层和下一层之间的关系，而与祖父层的关系相对较小。也就是让祖父层和下一层重叠多是一个很糟的决定
+
   return (num_input_files(0) == 1 && num_input_files(1) == 0 &&
           TotalFileSize(grandparents_) <=
               MaxGrandParentOverlapBytes(vset->options_));

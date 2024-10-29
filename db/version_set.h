@@ -113,7 +113,7 @@ class Version {
 
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
-
+  /*包含了当前版本的所有文件，统计信息和相关状态*/
  private:
   friend class Compaction;
   friend class VersionSet;
@@ -145,12 +145,13 @@ class Version {
   void ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                           bool (*func)(void*, int, FileMetaData*));
 
+  /*每个版本，双向链表，引用计数*/
   VersionSet* vset_;  // VersionSet to which this Version belongs
   Version* next_;     // Next version in linked list
   Version* prev_;     // Previous version in linked list
   int refs_;          // Number of live refs to this version
 
-  // List of files per level
+  // List of files per level 每个层级的文件元数据
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
@@ -363,12 +364,13 @@ class Compaction {
 
   Compaction(const Options* options, int level);
 
-  int level_;
-  uint64_t max_output_file_size_;
-  Version* input_version_;
-  VersionEdit edit_;
+  int level_; //正在进行压缩的级别
+  uint64_t max_output_file_size_; // 最大输出文件大小限制
+  Version* input_version_; // 指向当前压缩的输入版本
+  VersionEdit edit_; // 保存压缩操作所作的编辑内容，包含需要添加和删除的文件
 
   // Each compaction reads inputs from "level_" and "level_+1"
+  // 一个存储当前级别，一个存储下一个几倍
   std::vector<FileMetaData*> inputs_[2];  // The two sets of inputs
 
   // State used to check for number of overlapping grandparent files
@@ -385,6 +387,7 @@ class Compaction {
   // is that we are positioned at one of the file ranges for each
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
+  // 输入版本的文件列表中为每个级别保存指向当前状态的索引
   size_t level_ptrs_[config::kNumLevels];
 };
 

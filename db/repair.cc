@@ -68,11 +68,16 @@ class Repairer {
   }
 
   Status Run() {
-    Status status = FindFiles();
+    /*查找数据库目录中的文件
+    * 解析文件名，提取文件编号和类型
+    * 对于描述符文件，文件名存入manifest
+    * 对于日志和表文件，存储在logs和table_number中
+    */
+    Status status = FindFiles(); 
     if (status.ok()) {
-      ConvertLogFilesToTables();
-      ExtractMetaData();
-      status = WriteDescriptor();
+      ConvertLogFilesToTables(); // 将日志文件转换成表文件
+      ExtractMetaData(); // 获取每个文件的元数据(key)以及最终数据库的元数据(seq)
+      status = WriteDescriptor(); // 创建一个新的manifest文件，将扫描的数据库元数据进行记录
     }
     if (status.ok()) {
       unsigned long long bytes = 0;
